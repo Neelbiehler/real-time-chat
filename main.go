@@ -110,6 +110,17 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	if r.Header.Get("Connection") != "Upgrade" {
+		http.Error(w, "Expected 'Connection: Upgrade' header", http.StatusBadRequest)
+		return
+	}
+
+	if r.Header.Get("Upgrade") != "websocket" {
+		http.Error(w, "Expected 'Upgrade: websocket' header", http.StatusBadRequest)
+		return
+	}
+
 	defer conn.Close()
 
 	redisPubSub := rdb.Subscribe(context.Background(), "chat")

@@ -1,0 +1,25 @@
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+
+# Folders
+_vendor
+.idea
+.vscode
+node_modules
+
+# Binary files
+chat-app
+real-time-chat
+*.exe
+
+
+# Log files
+*.log
+
+# Go binary
+*.exe
+
+# Mac OS Files
+.DS_Store
