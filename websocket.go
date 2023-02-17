@@ -1,13 +1,11 @@
 package main
 
 import (
+	"log"
+	"net/http"
+
 	"github.com/gorilla/websocket"
 )
-
-type message struct {
-	Username string `json:"username"`
-	Text     string `json:"text"`
-}
 
 type hub struct {
 	clients    map[*client]bool
@@ -16,10 +14,13 @@ type hub struct {
 	unregister chan *client
 }
 
-type client struct {
-	hub  *hub
-	conn *websocket.Conn
-	send chan []byte
+func newHub() *hub {
+	return &hub{
+		broadcast:  make(chan []byte),
+		register:   make(chan *client),
+		unregister: make(chan *client),
+		clients:    make(map[*client]bool),
+	}
 }
 
 func (h *hub) run() {
@@ -45,13 +46,19 @@ func (h *hub) run() {
 	}
 }
 
+type client struct {
+	hub  *hub
+	ws   *websocket.Conn
+	send chan []byte
+}
+
 func (c *client) read() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		c.ws.Close()
 	}()
 	for {
-		_, message, err := c.conn.ReadMessage()
+		_, message, err := c.ws.ReadMessage()
 		if err != nil {
 			break
 		}
@@ -61,16 +68,42 @@ func (c *client) read() {
 
 func (c *client) write() {
 	defer func() {
-		c.conn.Close()
+		c.ws.Close()
 	}()
 	for {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			c.conn.WriteMessage(websocket.TextMessage, message)
+			err := c.ws.WriteMessage(websocket.TextMessage, message)
+			if err != nil {
+				break
+			}
 		}
 	}
+}
+
+func serveWs(hubInstance *hub, w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	client := &client{
+		hub:  hubInstance,
+		ws:   ws,
+		send: make(chan []byte, 256),
+	}
+	hubInstance.register <- client
+	go client.write()
+	client.read()
 }
